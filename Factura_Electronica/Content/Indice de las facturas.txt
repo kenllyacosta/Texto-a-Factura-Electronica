@@ -1,0 +1,32 @@
+0. Tipo de Factura
+1. E-NCF
+2. Razón social del comprador
+3. RNC del comprador
+4. E-NCF de Referencias
+5. Descuentos
+6. Recargos
+7. Propina
+8. Comentarios
+9. Pago efectivo
+10. Pago cheque/Transferencia/Depósito 
+11. Pago td/tc
+12. Venta a credito
+13. Bono o certificado de regalo
+14. Permuta
+15. Nota de credito
+16. Otras formas de pago
+17. Fecha Vencimiento Secuencia
+18. Tipo De Ingreso
+19. Fecha Emision
+20. Condiciones
+21. Indicador MontoGravado
+22. Municipio
+23. Provincia
+
+Para los items
+0. Tipo
+1. Cantidad
+2. Precio
+3. TasaImpuesto
+4. Código
+5. Unidad de medida

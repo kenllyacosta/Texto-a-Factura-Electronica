@@ -1,0 +1,232 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{hyperref}
+
+\title{Interface Electrónica 1.0.0}
+\author{}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\section*{Manual de adaptación para sistemas de terceros que disponen de su código fuente}
+\textbf{Manual técnico}
+
+Manual para crear una factura electrónica desde cualquier sistema que genere un archivo .txt con la estructura dada en el directorio \texttt{C:\textbackslash Electronico\textbackslash Factura.txt}. Para crear cualquier tipo de documento electrónico, es necesario cumplir con todos los campos, su separador correspondiente y su tamaño máximo para garantizar el buen funcionamiento y la integridad de los datos. El archivo que deben generar las aplicaciones debe respetar la siguiente estructura y orden ya que los mismos son leídos para su procesamiento en forma secuencial. El archivo cuenta con una primera línea que representa la factura misma y las demás líneas siguientes son los Ítems de dicha factura. Adjunto se anexa un archivo ejemplo para comparación. Separador de campo utilizado \texttt{||}, los campos que no tengan datos deben estar en blanco \texttt{""}. Más adelante detallaremos algunas restricciones a tomar en cuenta por cada línea del archivo con sus valores máximos permitidos.
+
+\section*{Prerrequisitos}
+Para consumir los servicios de facturación electrónica el sistema debe estar configurado con un nombre de usuario, clave, RNC del emisor, Razón social del emisor, Dirección del emisor, Municipio del emisor, Provincia del emisor y configurar las url de los entornos. Esta configuración se debe realizar en el archivo \texttt{Empresa.json}. El usuario debe poseer un certificado digital personal para procesos tributarios que puede conseguir en \url{https://www.viafirma.do/}. Dicho certificado debe cargarse antes de proceder a consumir el sistema, para ello, debes abrir la carpeta del sistema y mediante \texttt{cmd} usar el comando certificado pasándole los argumentos como el nombre del certificado y su extensión espacio clave del certificado. Ejemplo: \texttt{.\textbackslash Factura\_Electronica.exe certificado nombredelcertificado.extensión clave}
+
+Otros comandos permitidos son:
+\begin{itemize}
+    \item \texttt{.\textbackslash Factura\_Electronica.exe trackid 123456789 E32000000000} Para obtener el identificador único de cada envío.
+    \item \texttt{.\textbackslash Factura\_Electronica.exe estatus 7ef93879-dcc9-49b1-bce3-50738b476530} Para consultar el estatus del comprobante. Aceptado, Aceptado condicional o rechazado.
+    \item \texttt{.\textbackslash Factura\_Electronica.exe timbre 132071751 E32000001000} Este comando realiza la consulta de información relacionada para la impresión del comprobante y la generación del código QR con el enlace o URL de consulta.
+    \item \texttt{.\textbackslash Factura\_Electronica.exe infocertificado} Obtiene información de tu certificado actual.
+    \item \texttt{.\textbackslash Factura\_Electronica.exe infotoken} Retorna el token a utilizarse en los envíos, esto valida que puedes o no emitir E-NCF.
+    \item \texttt{.\textbackslash Factura\_Electronica.exe directorio 123456789} Este comando retorna información de emisores electrónicos mediante su RNC. Este comando solo funciona en ambiente de producción y se usa para consultar las URL’s de los emisores actuales.
+    \item \texttt{.\textbackslash Factura\_Electronica.exe enviaracomprador urlautenticacion urlrecepcion} Este comando se usa para enviar al comprador la factura actual que existe en el directorio.
+    \item \texttt{.\textbackslash Factura\_Electronica.exe ncfrecibidos 01/01/2024 12/31/2024} Este comando consulta los E-NCF que hemos recibido de parte de nuestros suplidores.
+    \item \texttt{.\textbackslash Factura\_Electronica.exe aprobaciones 01/01/2024 12/31/2024} Este comando se usa para consultar las aprobaciones comerciales que hemos recibido en un rango de fechas.
+    \item \texttt{.\textbackslash Factura\_Electronica.exe enviaraprobacion urlAprobacionComercial urlAutenticacion rncEmisor rncComprador ncf fechaemision monto aprobado comentarios} Este comando envía una aprobación comercial al destino.
+\end{itemize}
+
+Cada ejecución de los comandos crea un archivo de texto con el resultado de la consulta en caso exista información.
+
+\section*{Línea 1: La Factura}
+\begin{itemize}
+    \item \textbf{TipoDeFactura} toma uno de los siguientes valores obligatorios:
+    \begin{enumerate}
+        \item Factura de Crédito Fiscal Electrónica
+        \item Factura de Consumo Electrónica
+        \item Nota de Débito Electrónica
+        \item Nota de Crédito Electrónica
+        \item Compras Electrónico
+        \item Gastos Menores Electrónico
+        \item Regímenes Especiales Electrónico
+        \item Gubernamental Electrónico
+        \item Comprobante de Exportaciones Electrónico
+        \item Comprobante para Pagos al Exterior Electrónico
+    \end{enumerate}
+    Fuera de estos valores se tomará por defecto el 2 como tipo de factura.
+
+    \item \textbf{NCF} toma uno de los siguientes valores de manera obligatoria con inicio E:
+    \begin{itemize}
+        \item 13 – Dígitos.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{RazonSocialDelComprador} toma uno de los siguientes valores de manera opcional para consumidores finales y obligatorio para crédito fiscal:
+    \begin{itemize}
+        \item 40 – Caracteres máximo.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{RNCDelComprador} toma uno de los siguientes valores de manera obligatoria en operaciones a crédito fiscal:
+    \begin{itemize}
+        \item 11 o 9 – Dígitos que serán validados antes de enviar los datos a la memoria fiscal.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{NCFReferencia} toma uno de los siguientes valores de manera obligatoria en operaciones a notas de crédito:
+    \begin{itemize}
+        \item 13 – Dígitos que serán validados antes de enviar los datos.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{Descuento} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{Recargo} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{Propina} toma uno de los siguientes valores de manera opcional y no aplica cuando va con el 10\% legal:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{Comentarios} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item 1600 – Caracteres máximo.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{PagoEfectivo} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{PagoChequeTransferenciaDeposito} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{PagoTarjetaDebitoCredito} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{PagoACredito} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{FechaEmision} toma uno de los siguientes valores de manera obligatoria:
+    \begin{itemize}
+        \item DD/MM/AAAA – Formato de fecha que será validado antes de enviar los datos.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{FechaVencimiento} toma uno de los siguientes valores de manera opcional y solo aplica para operaciones a crédito fiscal:
+    \begin{itemize}
+        \item DD/MM/AAAA – Formato de fecha que será validado antes de enviar los datos.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{MontoGravado1} toma uno de los siguientes valores de manera obligatoria:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{Impuesto1} toma uno de los siguientes valores de manera obligatoria:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{MontoGravado2} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{Impuesto2} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{MontoGravado3} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{Impuesto3} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{MontoExento} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{MontoOtros} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+\end{itemize}
+
+\section*{Línea 2+: Los Ítems}
+\begin{itemize}
+    \item \textbf{NCF} toma uno de los siguientes valores de manera obligatoria:
+    \begin{itemize}
+        \item 13 – Dígitos que serán validados antes de enviar los datos a la memoria fiscal.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{ItemDescripcion} toma uno de los siguientes valores de manera obligatoria:
+    \begin{itemize}
+        \item 200 – Caracteres máximo.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{ItemCantidad} toma uno de los siguientes valores de manera obligatoria:
+    \begin{itemize}
+        \item N.5 – 5 Dígitos sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{ItemPrecioUnitario} toma uno de los siguientes valores de manera obligatoria:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{ItemDescuento} toma uno de los siguientes valores de manera opcional:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{ItemImpuesto} toma uno de los siguientes valores de manera obligatoria:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+
+    \item \textbf{ItemTotal} toma uno de los siguientes valores de manera obligatoria:
+    \begin{itemize}
+        \item N.2 – 2 Dígitos decimales sin el punto ni la coma.
+    \end{itemize}
+    Fuera de estos valores no se tomará por defecto ningún valor.
+\end{itemize}
+
+\end{document}
