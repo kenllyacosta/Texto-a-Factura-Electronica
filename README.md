@@ -1,6 +1,6 @@
 # 📄 Documentación de Comandos - Factura_Electronica.exe
 
-Este repositorio contiene la documentación detallada de los comandos disponibles en la herramienta `Factura_Electronica.exe`, una utilidad de línea de comandos para gestionar comprobantes fiscales electrónicos (facturas electrónicas) en República Dominicana.
+Este repositorio contiene la documentación detallada de los comandos disponibles en la herramienta `Factura_Electronica.exe`, una utilidad de línea de comandos para gestionar comprobantes fiscales electrónicos (facturas electrónicas) en República Dominicana. Desde un archivo .txt puedes convertirlo a una factura electrónica válida.
 
 ## 📌 Funcionalidades documentadas
 
