@@ -3,9 +3,7 @@ using DGIIFacturaElectronica.Models;
 using EpsonESCP;
 using Factura_Electronica.Models;
 using QRCoder;
-using System.IO;
 using System.Text.Json;
-using static QRCoder.PayloadGenerator.SwissQrCode;
 
 namespace Factura_Electronica
 {
