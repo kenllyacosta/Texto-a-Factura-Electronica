@@ -1,7 +1,11 @@
 ﻿using DGIIFacturaElectronica;
 using DGIIFacturaElectronica.Models;
+using EpsonESCP;
 using Factura_Electronica.Models;
+using QRCoder;
+using System.IO;
 using System.Text.Json;
+using static QRCoder.PayloadGenerator.SwissQrCode;
 
 namespace Factura_Electronica
 {
@@ -169,12 +173,31 @@ namespace Factura_Electronica
                 estatus = await EnviarFactura(facturaElectronica);
             }).Wait();
 
+            //Consultamos el TrackId de la factura enviada
+            Task.Run(async () =>
+            {
+                await ConsultarTrackId(facturaElectronica.RNCEmisor, facturaElectronica.SecuenciaGOB!);
+            }).Wait();
+
             if (estatus.Contains("Aceptado"))
             {
+                Timbre timbre = null!;
                 //Consultamos su Timbre
                 Task.Run(async () =>
                 {
-                    await ConsultarTimbre(facturaElectronica.FechaEmision, Empresa.RNCEmisor!, facturaElectronica.SecuenciaGOB!);
+                    timbre = await ConsultarTimbre(facturaElectronica.FechaEmision, Empresa.RNCEmisor!, facturaElectronica.SecuenciaGOB!);
+                }).Wait();
+
+                //Create a QR Code using the Timbre information
+                string qrCodePath = CrearCodigoQR(timbre);
+
+                //Crear Print con la información del Timbre y la Factura
+                PrintDocument(facturaElectronica, timbre, qrCodePath);
+
+                //Descargamos el XML de la factura
+                Task.Run(async () =>
+                {
+                    await DescargarXML(Empresa.RNCEmisor!, facturaElectronica.SecuenciaGOB!);
                 }).Wait();
             }
             else
@@ -189,23 +212,314 @@ namespace Factura_Electronica
             if (!Directory.Exists(newFolder))
                 Directory.CreateDirectory(newFolder);
 
-            string newFilePath = Path.Combine(newFolder, $"{Empresa.RNCEmisor!.Trim()}{facturaElectronica.SecuenciaGOB}.txt");
+            string newFilePath = Path.Combine(newFolder, $"{Empresa.RNCEmisor!.Trim()}{facturaElectronica.SecuenciaGOB}_factura.txt");
             File.WriteAllText(newFilePath, File.ReadAllText(ruta));
+        }
+
+        private static void PrintDocument(FacturaElectronica facturaElectronica, Timbre timbre, string qrCodePath)
+        {
+            List<string> Lineas = new();
+            string template = "{0,-24:N2}{1,14:N2}{2,18:N2}";
+            int tamanoImpresionNoFiscal = 56;
+
+            Lineas.AddRange(EncabezadoLineas());
+            Lineas.Add(" ");
+            if (timbre.fechaFirma != null)
+                Lineas.Add($"{timbre.fechaFirma}");
+            else
+                Lineas.Add($"{facturaElectronica.FechaEmision} {DateTime.Now.ToString("HH:mm:ss")}");
+            Lineas.Add($"e-NCF: {facturaElectronica.SecuenciaGOB}");
+
+            if (!facturaElectronica.SecuenciaGOB.StartsWith("E32"))
+            {
+                Lineas.Add($"{facturaElectronica.RNCComprador}");
+                Lineas.Add($"{facturaElectronica.RazonSocialComprador}");
+            }
+
+            string raya = new string('-', tamanoImpresionNoFiscal);
+            Lineas.Add(raya);
+            if (facturaElectronica.SecuenciaGOB.StartsWith("E31"))
+                Lineas.Add("Factura de Crédito Fiscal Electronica".StringCenter(tamanoImpresionNoFiscal));
+            if (facturaElectronica.SecuenciaGOB.StartsWith("E32"))
+                Lineas.Add("Factura de Consumo Electronica".StringCenter(tamanoImpresionNoFiscal));
+            if (facturaElectronica.SecuenciaGOB.StartsWith("E44"))
+                Lineas.Add("Regimenes Especiales Electronico".StringCenter(tamanoImpresionNoFiscal));
+            if (facturaElectronica.SecuenciaGOB.StartsWith("E45"))
+                Lineas.Add("Gubernamental Electronico".StringCenter(tamanoImpresionNoFiscal));
+            if (facturaElectronica.SecuenciaGOB.StartsWith("E46"))
+                Lineas.Add("Comprobante de Exportaciones Electronico".StringCenter(tamanoImpresionNoFiscal));
+            if (facturaElectronica.SecuenciaGOB.StartsWith("E41"))
+                Lineas.Add("Compras Electronico".StringCenter(tamanoImpresionNoFiscal));
+            if (facturaElectronica.SecuenciaGOB.StartsWith("E43"))
+                Lineas.Add("Gastos Menores Electronico".StringCenter(tamanoImpresionNoFiscal));
+            if (facturaElectronica.SecuenciaGOB.StartsWith("E47"))
+                Lineas.Add("Comprobante para Pagos al Exterior Electronico".StringCenter(tamanoImpresionNoFiscal));
+            Lineas.Add(raya);
+            Lineas.Add(string.Format(template, "Descripcion", "Imp.", "Valor"));
+            Lineas.Add(raya);
+
+            decimal impuestos = 0, total = 0;
+            foreach (var item in facturaElectronica.Detalles)
+            {
+                Lineas.Add($"{item.Cantidad} x {item.Precio}");
+                decimal cantidadPorPrecio = item.Cantidad * item.Precio;
+                if (facturaElectronica.IndicadorMontoGravado == 0)//no tienen ITBIS incluido
+                {
+                    if (item.IndicadorFacturacion == 1) //18%
+                        Lineas.Add(string.Format(template, item.Descripcion.Trim(), $"{1.18m}", item.Cantidad * item.Precio));
+                }
+                else //si tienen ITBIS incluido
+                {
+                    if (item.IndicadorFacturacion == 1) //18%
+                    {
+                        decimal imp = cantidadPorPrecio - (cantidadPorPrecio / 1.18m);
+                        Lineas.Add(string.Format(template, item.Descripcion.Trim(), $"{imp:N2}", $"{cantidadPorPrecio:N2}"));
+                        impuestos += imp;
+                    }
+                }
+                total += cantidadPorPrecio;
+            }
+            Lineas.Add(raya);
+            Lineas.Add(string.Format(template, "Subtotal", string.Format("{0:N2}", impuestos), string.Format("{0:N2}", total)));
+            Lineas.Add(string.Format(template, "Desc/Rec.", "", "0.00"));
+            Lineas.Add(string.Format(template, "Total", string.Format("{0:N2}", impuestos), string.Format("{0:N2}", total)));
+            Lineas.Add(" ");
+
+            //1: Contado 2: Crédito
+            if (facturaElectronica.TipoPago != null)
+            {
+                if (facturaElectronica.TipoPago == 1)
+                    Lineas.Add("Contado");
+                else
+                    Lineas.Add("Credito");
+            }
+
+            Lineas.Add(" ");
+            decimal totalCobrado = 0;
+            if (facturaElectronica.FormaPago != null && facturaElectronica.MontoPago != null)
+                for (int i = 0; i < facturaElectronica.FormaPago.Length; i++)
+                {
+                    totalCobrado += facturaElectronica.MontoPago[i];
+                    if (facturaElectronica.FormaPago[i] == 1) //Efectivo
+                        Lineas.Add(string.Format(template, "Efectivo", "", $"{facturaElectronica.MontoPago[i]:N2}"));
+                    if (facturaElectronica.FormaPago[i] == 2) //Cheque/Transferencia/Depósito 
+                        Lineas.Add(string.Format(template, "Cheq/Trans/Dep", "", $"{facturaElectronica.MontoPago[i]:N2}"));
+                    if (facturaElectronica.FormaPago[i] == 3) //Tarjeta de Débito/Crédito
+                        Lineas.Add(string.Format(template, "Tarjeta", "", $"{facturaElectronica.MontoPago[i]:N2}"));
+                    if (facturaElectronica.FormaPago[i] == 4) //Venta a Crédito
+                        Lineas.Add(string.Format(template, "Venta a Crédito", "", $"{facturaElectronica.MontoPago[i]:N2}"));
+
+                    if (facturaElectronica.FormaPago[i] == 5) //Bonos o Certificados de regalo
+                        Lineas.Add(string.Format(template, "Bonos o Certificados", "", $"{facturaElectronica.MontoPago[i]:N2}"));
+                    if (facturaElectronica.FormaPago[i] == 6) //Permuta
+                        Lineas.Add(string.Format(template, "Permuta", "", $"{facturaElectronica.MontoPago[i]:N2}"));
+                    if (facturaElectronica.FormaPago[i] == 7) //Nota de crédito
+                        Lineas.Add(string.Format(template, "Nota de crédito", "", $"{facturaElectronica.MontoPago[i]:N2}"));
+                    if (facturaElectronica.FormaPago[i] == 8) //Otras Formas de pago
+                        Lineas.Add(string.Format(template, "Otras Formas de pago", "", $"{facturaElectronica.MontoPago[i]:N2}"));
+                }
+
+            Lineas.Add(" ");
+            if (totalCobrado > total)
+                Lineas.Add(string.Format(template, "Cambio", "", $"{totalCobrado - total:N2}"));
+
+            string newFolder = Path.Combine(Directory.GetCurrentDirectory(), "FacturasElectronicas", DateTime.Now.ToString("ddMMyyyy"));
+            if (!Directory.Exists(newFolder))
+                Directory.CreateDirectory(newFolder);
+
+            foreach (var item in Lineas)
+                LogLines(item, newFolder, $"{timbre.rncEmisor}{facturaElectronica.SecuenciaGOB}.txt");
+
+            if (!string.IsNullOrWhiteSpace(Empresa!.PrinterPOS))
+                ImpresionDeLineas(Lineas, qrCodePath.Replace("jpg", "png"), timbre.codigoSeguridad, timbre.fechaFirma!);
+        }
+
+        private static IEnumerable<string> EncabezadoLineas()
+        {
+            List<string> lineas = new();
+            #region Reporte completo            
+            byte tamanoImpresionNoFiscal = 56;
+
+            if (!string.IsNullOrWhiteSpace(Empresa!.RazonSocialEmisor))
+                lineas.Add(Empresa.NombreComercialEmisor!.Trim().ToUpper().StringCenter(44));
+
+            if (!string.IsNullOrWhiteSpace(Empresa.DirecionEmisor))
+                lineas.Add(Empresa.DirecionEmisor.Trim().StringCenter(tamanoImpresionNoFiscal));
+            if (!string.IsNullOrWhiteSpace(Empresa.RNCEmisor))
+                lineas.Add($"{Empresa.RNCEmisor.Trim()}".StringCenter(tamanoImpresionNoFiscal));
+
+            if (!string.IsNullOrWhiteSpace(Empresa.Telefono))
+                lineas.Add(Empresa.Telefono.Trim().StringCenter(tamanoImpresionNoFiscal));
+            #endregion
+
+            return lineas;
+        }
+
+        internal static void ImpresionDeLineas(List<string> lineas)
+        {
+            ImpresionESC impresionESC = new(Empresa!.PrinterPOS!.Trim());
+            foreach (var linea in lineas)
+            {
+                if (linea.Trim().StartsWith("1|") || linea.Trim().StartsWith("2|"))
+                {
+                    string[] valores = linea.Split(new string[] { "|" }, StringSplitOptions.None);
+                    bool negrita = valores[1] != "0";
+                    string line = linea.Trim().StartsWith("2|") ? valores[1] : valores[7];
+
+                    if (negrita)
+                        impresionESC.AddNewLine(line, Formatos.NormalNegrita);
+                }
+                else
+                {
+                    impresionESC.AddNewLine(linea, Formatos.NormalNegrita);
+                }
+            }
+
+            impresionESC.CortarPapel();
+
+            impresionESC.Print();
+            impresionESC.Close();
+        }
+
+        internal static void ImpresionDeLineas(List<string> lineas, string qrPath, string code, string fechaFirma)
+        {
+            ImpresionESC impresionESC = new(Empresa!.PrinterPOS!.Trim());
+            foreach (var linea in lineas)
+            {
+                if (linea.Trim().StartsWith("1|") || linea.Trim().StartsWith("2|"))
+                {
+                    string[] valores = linea.Split(new string[] { "|" }, StringSplitOptions.None);
+                    bool negrita = valores[1] != "0";
+                    string line = linea.Trim().StartsWith("2|") ? valores[1] : valores[7];
+
+                    if (negrita)
+                        impresionESC.AddNewLine(line, Formatos.NormalNegrita);
+                }
+                else
+                {
+                    impresionESC.AddNewLine(linea, Formatos.NormalNegrita);
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(qrPath))
+                impresionESC.CortarPapel();
+
+            impresionESC.Print();
+            impresionESC.Close();
+
+            if (!string.IsNullOrWhiteSpace(qrPath))
+            {
+                impresionESC = new ImpresionESC(Empresa!.PrinterPOS!.Trim());
+                impresionESC.AddNewLine("", Formatos.NormalNegrita);
+                impresionESC.ImprimirImagen(qrPath, Empresa.QrWidth, Empresa.QrHeight, 0, Empresa.QrBlankColumnsBefore);
+
+                impresionESC.AddNewLine($"Codigo de Seguridad: {code}".StringCenter(56));
+                impresionESC.AddNewLine($"Fecha de Firma Digital: {fechaFirma}".StringCenter(56));
+
+                impresionESC.CortarPapel();
+                impresionESC.Print();
+                impresionESC.Close();
+            }
+        }
+
+        private static string CrearCodigoQR(Timbre timbre)
+        {
+            string qrCodePath = string.Empty;
+            if (timbre == null || string.IsNullOrWhiteSpace(timbre.urlImage))
+            {
+                qrCodePath = "No se pudo crear el código QR porque no se obtuvo un Timbre válido.";
+                LogMessage(qrCodePath);
+                return qrCodePath;
+            }
+            //Create a QR Code using the Timbre information
+            qrCodePath = Path.Combine(Directory.GetCurrentDirectory(), "QR", $"{timbre.rncEmisor}{timbre.encf}.jpg");
+            if (!Directory.Exists(Path.GetDirectoryName(qrCodePath)))
+                Directory.CreateDirectory(Path.GetDirectoryName(qrCodePath)!);
+
+            using var qrGenerator = new QRCodeGenerator();
+            using var qrCodeData = qrGenerator.CreateQrCode(timbre.urlImage, QRCodeGenerator.ECCLevel.Q);
+            var pngQrCode = new PngByteQRCode(qrCodeData);
+            byte[] pngBytes = pngQrCode.GetGraphic(20);
+            File.WriteAllBytes(qrCodePath.Replace(".jpg", ".png"), pngBytes);
+
+            LogMessage($"Código QR generado en: {qrCodePath}");
+            return qrCodePath;
         }
 
         private static FacturaElectronica CrearFacturaElectronica(FacturaTxt facturaFiscal, List<ItemTxt> items)
         {
             List<Detalle> Detalles = new();
             foreach (var item in items)
-                Detalles.Add(new Detalle(byte.Parse(item.Tipo!), decimal.Parse(item.Precio!), item.Descripcion, item.Codigo, decimal.Parse(item.Cantidad!)));
+                Detalles.Add(new Detalle(byte.Parse(item.Tipo!), decimal.Parse(item.Precio!), item.Descripcion!.Trim().Length > 24 ? item.Descripcion.Trim().Substring(0, 24) : item.Descripcion.Trim(), item.Codigo, decimal.Parse(item.Cantidad!)));
 
-            return new FacturaElectronica(Detalles.ToArray(),
+            var result = new FacturaElectronica(Detalles.ToArray(),
                 facturaFiscal.NCF, facturaFiscal.FechaVencimientoSecuencia, facturaFiscal.TipoDeIngreso,
                 Empresa!.RNCEmisor, Empresa.RazonSocialEmisor,
                 Empresa.DirecionEmisor, facturaFiscal.FechaEmision, facturaFiscal.RNCDelComprador,
                 facturaFiscal.RazonSocialDelComprador, byte.Parse(facturaFiscal.Condiciones!),
                 byte.Parse(facturaFiscal.IndicadorMontoGravado!),
                 Empresa.Municipio, facturaFiscal.Municipio, Empresa.Provincia, facturaFiscal.Provincia);
+
+            //1: Efectivo
+            //2: Cheque/Transferencia/Depósito
+            //3: Tarjeta de Débito/Crédito
+            //4: Venta a Crédito
+            //5: Bonos o Certificados de regalo
+            //6: Permuta
+            //7: Nota de crédito
+            //8: Otras Formas de pago
+            List<byte> tiposDePago = new();
+            List<decimal> montosDePago = new();
+            if (!string.IsNullOrWhiteSpace(facturaFiscal.Efectivo))
+            {
+                tiposDePago.Add(1);
+                montosDePago.Add(decimal.Parse(facturaFiscal.Efectivo));
+            }
+            if (!string.IsNullOrWhiteSpace(facturaFiscal.ChequeTransferenciaDeposito))
+            {
+                tiposDePago.Add(2);
+                montosDePago.Add(decimal.Parse(facturaFiscal.ChequeTransferenciaDeposito));
+            }
+            if (!string.IsNullOrWhiteSpace(facturaFiscal.TarjetaDebitoCredito))
+            {
+                tiposDePago.Add(3);
+                montosDePago.Add(decimal.Parse(facturaFiscal.TarjetaDebitoCredito));
+            }
+            if (!string.IsNullOrWhiteSpace(facturaFiscal.VentaCredito))
+            {
+                tiposDePago.Add(4);
+                montosDePago.Add(decimal.Parse(facturaFiscal.VentaCredito));
+            }
+            if (!string.IsNullOrWhiteSpace(facturaFiscal.BonosOCertificadosDeRegalo))
+            {
+                tiposDePago.Add(5);
+                montosDePago.Add(decimal.Parse(facturaFiscal.BonosOCertificadosDeRegalo));
+            }
+
+            if (!string.IsNullOrWhiteSpace(facturaFiscal.Permuta))
+            {
+                tiposDePago.Add(6);
+                montosDePago.Add(decimal.Parse(facturaFiscal.Permuta));
+            }
+
+            if (!string.IsNullOrWhiteSpace(facturaFiscal.NotaCredito))
+            {
+                tiposDePago.Add(7);
+                montosDePago.Add(decimal.Parse(facturaFiscal.NotaCredito));
+            }
+            if (!string.IsNullOrWhiteSpace(facturaFiscal.OtrasFormasDePago))
+            {
+                tiposDePago.Add(8);
+                montosDePago.Add(decimal.Parse(facturaFiscal.OtrasFormasDePago));
+            }
+
+            if (tiposDePago.Count != 0 && montosDePago.Count != 0)
+            {
+                result.FormaPago = [.. tiposDePago];
+                result.MontoPago = [.. montosDePago];
+            }
+
+            return result;
         }
 
         private static List<ItemTxt> CrearItemsFiscalDesdeTexto(string[] Factura)
@@ -338,15 +652,13 @@ namespace Factura_Electronica
             List<TrackId> resultado = await documentosElectronicos!.ConsultarTrackId(rncEmisor, eNcf);
             Console.WriteLine(JsonSerializer.Serialize(resultado));
 
-            //Escribimos el resultado en el archivo con su nombre
-            using (StreamWriter sw = new("trackid.txt", true))
-            {
-                foreach (var item in resultado)
-                {
-                    await LogMessageAsync($"TrackId: {item.trackId}\nMensaje: {item.mensaje}\nEstado: {item.estado}\nFecha Recepcion: {item.fechaRecepcion}");
-                    await sw.WriteLineAsync(JsonSerializer.Serialize(item));
-                }
-            }
+            //Copy end replace the Factura.txt file with the new one in a new folder
+            string newFolder = Path.Combine(Directory.GetCurrentDirectory(), "FacturasElectronicas", DateTime.Now.ToString("ddMMyyyy"));
+            if (!Directory.Exists(newFolder))
+                Directory.CreateDirectory(newFolder);
+
+            string newFilePath = Path.Combine(newFolder, $"{rncEmisor}{eNcf}_TrackId.txt");
+            await File.WriteAllTextAsync(newFilePath, JsonSerializer.Serialize(resultado));
 
             return resultado;
         }
@@ -354,15 +666,20 @@ namespace Factura_Electronica
         private static async Task<Timbre> ConsultarTimbre(string fecha, string rnc, string ncf)
         {
             Timbre resultado = await documentosElectronicos!.ConsultarTimbre(fecha, rnc, ncf);
-            Console.WriteLine(JsonSerializer.Serialize(resultado));
+            await LogMessageAsync(JsonSerializer.Serialize(resultado));
 
-            await LogMessageAsync($"Fecha de Firma: {resultado.fechaFirma}\nfechaEmision: {resultado.fechaEmision}\nencf: {resultado.encf}\nRNC Comprador: {resultado.rncComprador}\nCódigo de Seguridad: {resultado.codigoSeguridad}\nMonto Total: {resultado.montoTotal}\nRrl Image: {resultado.urlImage}\nRNC Emisor: {resultado.rncEmisor}");
+            if (resultado.fechaFirma != null && resultado.fechaEmision != null && resultado.encf != null && resultado.rncComprador != null && resultado.codigoSeguridad != null && resultado.montoTotal != null && resultado.urlImage != null && resultado.rncEmisor != null)
+                await LogMessageAsync($"Fecha de Firma: {resultado.fechaFirma}\nfechaEmision: {resultado.fechaEmision}\nencf: {resultado.encf}\nRNC Comprador: {resultado.rncComprador}\nCódigo de Seguridad: {resultado.codigoSeguridad}\nMonto Total: {resultado.montoTotal}\nRrl Image: {resultado.urlImage}\nRNC Emisor: {resultado.rncEmisor}");
 
-            //Escribimos el resultado en el archivo con su nombre
-            using (StreamWriter sw = new("timbre.txt", true))
-                await sw.WriteLineAsync(JsonSerializer.Serialize(resultado));
+            //Copy end replace the Factura.txt file with the new one in a new folder
+            string newFolder = Path.Combine(Directory.GetCurrentDirectory(), "FacturasElectronicas", DateTime.Now.ToString("ddMMyyyy"));
+            if (!Directory.Exists(newFolder))
+                Directory.CreateDirectory(newFolder);
 
-            return resultado;
+            string newFilePath = Path.Combine(newFolder, $"{rnc}{ncf}_timbre.txt");
+            await File.WriteAllTextAsync(newFilePath, JsonSerializer.Serialize(resultado));
+
+            return resultado!;
         }
 
         private static async Task<string> ConsultarEstatus(string trackId)
@@ -496,12 +813,11 @@ namespace Factura_Electronica
         private static async Task<string> DescargarXML(string rnc, string ncf)
         {
             string resultado = await documentosElectronicos!.DescargaXMLFirmado(rnc, ncf);
-            Console.WriteLine(resultado);
-
+            
             if (!string.IsNullOrWhiteSpace(resultado))
             {
                 //Copy end replace the Factura.txt file with the new one in a new folder
-                string newFolder = Path.Combine(Directory.GetCurrentDirectory(), "XMLs", DateTime.Now.ToString("ddMMyyyy"));
+                string newFolder = Path.Combine(Directory.GetCurrentDirectory(), "FacturasElectronicas", DateTime.Now.ToString("ddMMyyyy"));
                 if (!Directory.Exists(newFolder))
                     Directory.CreateDirectory(newFolder);
 
@@ -528,6 +844,12 @@ namespace Factura_Electronica
         {
             using (StreamWriter sw = new("e-log.txt", append: true))
                 sw.WriteLine($"{DateTime.Now:dd-MM-yyyy HH:mm:ss}    {message}");
+        }
+
+        private static void LogLines(string message, string path, string fileName)
+        {
+            using (StreamWriter sw = new($"{path}\\{fileName}", append: true))
+                sw.WriteLine($"{message}");
         }
     }
 }

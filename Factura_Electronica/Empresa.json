@@ -1,13 +1,19 @@
 {
-  "Usuario": "usuario@mail.com",
-  "Clave": "tuclave",
+  "Usuario": "info@aslan.com.do",
+  "Clave": "1100",
   "URLBase": "https://api.aslan.com.do/TesteCF/",
   "uRlAutenticacion": "https://api.aslan.com.do/TesteCF/123456789/fe/Autenticacion",
   "uRlRecepcion": "https://api.aslan.com.do/TesteCF/123456789/Recepcion/api/ecf",
   "uRlAprobacionComercial": "https://api.aslan.com.do/TesteCF/123456789/AprobacionComercial/api/ecf",
-  "RNCEmisor": "123456789",
+  "RNCEmisor": "132071751",
   "RazonSocialEmisor": "Razón Social",
+  "NombreComercialEmisor": "Mi Nombre Comercial",
   "DirecionEmisor": "Mi direccion como emisor",
   "Municipio": "010101",
-  "Provincia": "010000"
+  "Provincia": "010000",
+  "Telefono": "1234567890",
+  "PrinterPOS": "EPSON TM-T88VI Receipt",
+  "QrWidth": 275,
+  "QrHeight": 275,
+  "QrBlankColumnsBefore": 120
 }

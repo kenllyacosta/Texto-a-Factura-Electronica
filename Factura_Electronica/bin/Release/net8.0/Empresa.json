@@ -1,0 +1,13 @@
+{
+  "Usuario": "usuario@mail.com",
+  "Clave": "tuclave",
+  "URLBase": "https://api.aslan.com.do/TesteCF/",
+  "uRlAutenticacion": "https://api.aslan.com.do/TesteCF/123456789/fe/Autenticacion",
+  "uRlRecepcion": "https://api.aslan.com.do/TesteCF/123456789/Recepcion/api/ecf",
+  "uRlAprobacionComercial": "https://api.aslan.com.do/TesteCF/123456789/AprobacionComercial/api/ecf",
+  "RNCEmisor": "123456789",
+  "RazonSocialEmisor": "Razón Social",
+  "DirecionEmisor": "Mi direccion como emisor",
+  "Municipio": "010101",
+  "Provincia": "010000"
+}

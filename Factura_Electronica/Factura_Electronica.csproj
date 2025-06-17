@@ -5,6 +5,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <PlatformTarget>x86</PlatformTarget>
   </PropertyGroup>
 
   <ItemGroup>
@@ -19,6 +20,16 @@
 
   <ItemGroup>
     <PackageReference Include="DGIIFacturaElectronica" Version="1.0.20" />
+    <PackageReference Include="QRCoder" Version="1.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="EpsonESCP">
+      <HintPath>Content\EpsonESCP.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Drawing.Common">
+      <HintPath>Content\System.Drawing.Common.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
 </Project>

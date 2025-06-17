@@ -53,6 +53,10 @@
             "DGIIFacturaElectronica": {
               "target": "Package",
               "version": "[1.0.20, )"
+            },
+            "QRCoder": {
+              "target": "Package",
+              "version": "[1.6.0, )"
             }
           },
           "imports": [
@@ -71,7 +75,7 @@
               "privateAssets": "all"
             }
           },
-          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.300/PortableRuntimeIdentifierGraph.json"
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.301/PortableRuntimeIdentifierGraph.json"
         }
       }
     }
