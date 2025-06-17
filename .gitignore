@@ -1,0 +1,11 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/.vs/Soluciones_Electronicas
+/Factura_Electronica/bin/Debug/net8.0/FacturasElectronicas/17062025
+/Factura_Electronica/bin/Debug/net8.0/QR
+/Factura_Electronica/bin/Debug/net8.0
+/Factura_Electronica/obj/publish/win-x86
+/Factura_Electronica/obj/Release/net8.0
+/Factura_Electronica/Properties/PublishProfiles
