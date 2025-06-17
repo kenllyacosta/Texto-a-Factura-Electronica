@@ -191,14 +191,14 @@ namespace Factura_Electronica
                 //Create a QR Code using the Timbre information
                 string qrCodePath = CrearCodigoQR(timbre);
 
-                //Crear Print con la información del Timbre y la Factura
-                PrintDocument(facturaElectronica, timbre, qrCodePath);
-
                 //Descargamos el XML de la factura
                 Task.Run(async () =>
                 {
                     await DescargarXML(Empresa.RNCEmisor!, facturaElectronica.SecuenciaGOB!);
                 }).Wait();
+
+                //Crear Print con la información del Timbre y la Factura
+                PrintDocument(facturaElectronica, timbre, qrCodePath);                
             }
             else
             {
