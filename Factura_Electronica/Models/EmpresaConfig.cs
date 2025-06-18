@@ -19,5 +19,6 @@
         public int QrWidth { get; set; }
         public int QrHeight { get; set; }
         public int QrBlankColumnsBefore { get; set; }
+        public byte CantidadDeCopias { get; set; }
     }
 }

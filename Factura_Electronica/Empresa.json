@@ -15,5 +15,6 @@
   "PrinterPOS": "EPSON TM-T88VI Receipt",
   "QrWidth": 275,
   "QrHeight": 275,
-  "QrBlankColumnsBefore": 120
+  "QrBlankColumnsBefore": 120,
+  "CantidadDeCopias": 1
 }

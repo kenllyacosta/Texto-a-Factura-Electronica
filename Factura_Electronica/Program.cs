@@ -329,7 +329,8 @@ namespace Factura_Electronica
                 LogLines(item, newFolder, $"{timbre.rncEmisor}{facturaElectronica.SecuenciaGOB}.txt");
 
             if (!string.IsNullOrWhiteSpace(Empresa!.PrinterPOS))
-                ImpresionDeLineas(Lineas, qrCodePath.Replace("jpg", "png"), timbre.codigoSeguridad, timbre.fechaFirma!);
+                for (int i = 0; i < Empresa.CantidadDeCopias; i++)
+                    ImpresionDeLineas(Lineas, qrCodePath.Replace("jpg", "png"), timbre.codigoSeguridad, timbre.fechaFirma!);
         }
 
         private static IEnumerable<string> EncabezadoLineas()
